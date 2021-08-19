@@ -1,46 +1,60 @@
 #!/opt/puppetlabs/puppet/bin/ruby
 
-chunks = []
+class Chunker
+  attr_reader :chunks
 
-union = Regexp.union([
-  %r{^#},
-  %r{^$},
+  def initialize
+    @chunks = [ [] ]
+  end
+
+  def <<(line)
+    @chunks.last << line
+  end
+
+  def chunk
+    @chunks << []
+  end
+
+  def sorted_yaml
+    sorted = @chunks.sort_by { |lines| sortkey(lines) }
+    topsort(%r{^lookup_options:\s*(#.*)?}, sorted)
+    topsort(%r{^---$}, sorted)
+
+    sorted.map { |lines| lines.join('') }
+          .join('')
+  end
+
+  private
+
+  def sortkey(lines)
+    lines.find { |line| line =~ %r{^[^#\s]} } || ''
+  end
+
+  def topsort(search, chunks)
+    index = chunks.index { |lines| sortkey(lines) =~ search }
+    return unless index
+    chunks.unshift(chunks.delete_at(index))
+  end
+end
+
+keep_together = Regexp.union([
+  %r{^\s*$},
   %r{^\s+},
 ])
 
+comment = Regexp.union([
+  %r{^#},
+])
+
+chunker = Chunker.new
 
 File.open('common.yaml') do |file|
-  # Prime the loop
-  line, chunk = [file.readline, []]
-
-  loop do
-    until line =~ union
-      chunk << line
-      chunks << chunk
-      line, chunk = [nil, []]
-      break if file.eof?
-      line = file.readline
-    end
-
-    until line !~ union
-      chunk << line
-      break if file.eof?
-      line = file.readline
-    end
-
-    if file.eof?
-      chunk << line
-      chunks << chunk unless chunk.empty?
-      break
-    end
+  chunker << file.readline
+  file.rewind
+  file.each_cons(2) do |prev, line|
+    chunker.chunk unless (line =~ keep_together) || (prev =~ comment)
+    chunker << line
   end
-
-  require 'pry'; binding.pry
-
-  dump = chunks.sort_by { |lines| lines.find { |line| line !~ union } }
-               .sort_by { |lines| lines.last =~ %r{^---$} ? 0 : 1 }
-               .map { |lines| lines.join('') }
-               .join('')
-
-  puts dump
 end
+
+puts chunker.sorted_yaml
