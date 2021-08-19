@@ -3,6 +3,14 @@
 class Chunker
   attr_reader :chunks
 
+  def self.keep_together?(line)
+    !!(line =~ KEEP_TOGETHER)
+  end
+
+  def self.comment?(line)
+    !!(line =~ COMMENT)
+  end
+
   def initialize
     @chunks = [ [] ]
   end
@@ -15,7 +23,7 @@ class Chunker
     @chunks << []
   end
 
-  def sorted_yaml
+  def to_sorted_yaml
     sorted = @chunks.sort_by { |lines| sortkey(lines) }
     topsort(%r{^lookup_options:\s*(#.*)?}, sorted)
     topsort(%r{^---$}, sorted)
@@ -25,6 +33,9 @@ class Chunker
   end
 
   private
+
+  KEEP_TOGETHER = Regexp.union([ %r{^\s*$}, %r{^\s+}, %r{^- }])
+  COMMENT = Regexp.union([%r{^#}])
 
   def sortkey(lines)
     lines.find { |line| line =~ %r{^[^#\s]} } || ''
@@ -37,24 +48,25 @@ class Chunker
   end
 end
 
-keep_together = Regexp.union([
-  %r{^\s*$},
-  %r{^\s+},
-])
-
-comment = Regexp.union([
-  %r{^#},
-])
-
+file = ARGF.file
 chunker = Chunker.new
 
-File.open('common.yaml') do |file|
-  chunker << file.readline
-  file.rewind
-  file.each_cons(2) do |prev, line|
-    chunker.chunk unless (line =~ keep_together) || (prev =~ comment)
-    chunker << line
-  end
+# Put the first line into the chunker's first chunk, then rewind the file
+# pointer so that #each_cons will have the correct prev and line values when
+# it starts.
+chunker << file.readline
+file.rewind
+
+# Use #each_cons(2) to process every line in the file one at a time, with the
+# ability to review what the previous line was.
+file.each_cons(2) do |prev, line|
+  # Start a new chunk unless the line should be kept together (with the
+  # previous line), or the previous line was a first-column comment. We
+  # attach first-column comments to the data line that follows them.
+  chunker.chunk unless Chunker.keep_together?(line) || Chunker.comment?(prev)
+
+  # Add the line to the current chunk
+  chunker << line
 end
 
-puts chunker.sorted_yaml
+puts chunker.to_sorted_yaml
