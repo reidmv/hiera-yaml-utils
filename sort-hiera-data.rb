@@ -1,5 +1,9 @@
 #!/opt/puppetlabs/puppet/bin/ruby
 
+# Usage:
+#
+#   ./sort-hiera-data.rb < common.yaml > common-sorted.yaml
+#
 class Chunker
   attr_reader :chunks
 
