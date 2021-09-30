@@ -1,0 +1,8 @@
+#!/bin/bash
+
+query="$1"
+echo # newline
+puppet-query "$query" \
+  | jq -r '(.[0] | keys) as $cols | $cols, map(. as $row | $cols | map($row[.]))[] | @tsv' \
+  | column -t -s "$(printf '\t')"
+echo # newline
