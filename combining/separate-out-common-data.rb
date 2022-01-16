@@ -25,11 +25,8 @@ end
 #
 # @param inputs [Array] array of filenames
 def common_data(filenames)
-  inputs = filenames.reduce({}) do |memo, filename|
-    memo.merge({
-      path: filename,
-      data: YAML.load_file(filename),
-    })
+  inputs = filenames.reduce([]) do |memo, filename|
+    memo << { path: filename, data: YAML.load_file(filename) }
   end
 
   keys = inputs.reduce([]) do |memo, input|
@@ -64,6 +61,7 @@ if File.exist?(output)
 end
 
 inputs = ARGV
+common = common_data(inputs)
 
-File.write(output, common_data(inputs).to_yaml)
-inputs.each { |input| remove_keys!(input) }
+File.write(output, common.to_yaml)
+inputs.each { |input| remove_keys!(input, common.keys) }
